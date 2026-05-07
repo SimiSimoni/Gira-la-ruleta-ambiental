@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Gira la ruleta ambiental</title>
+
+<style>
+    body 
+    {
+        margin: 0;
+        font-family: Tahoma, sans-serif;
+        background: #f2f4f6;
+        color: #335f80;
+        text-align: center;
+    }
+
+    #container 
+    {
+        position: relative;
+        width: 400px;
+        margin: 40px auto;
+    }
+
+    canvas 
+    {
+        background: #6c87a5;
+        border-radius: 50%;
+    }
+
+    #pointer 
+    {
+        position: absolute;
+        top: 50%;
+        right: -10px;
+        transform: translateY(-50%);
+        width: 0;
+        height: 0;
+        border-top: 15px solid transparent;
+        border-bottom: 15px solid transparent;
+        border-right: 30px solid #535c64;
+    }
+
+    button 
+    {
+        margin-top: 20px;
+        padding: 10px 20px;
+        font-size: 16px;
+        cursor: pointer;
+    }
+
+    #overlay 
+    {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(137, 157, 176, 0.6);
+        display: none;
+        justify-content: center;
+        align-items: center;
+    }
+
+    #box 
+    {
+        background: rgba(255,255,255,0.1);
+        padding: 30px;
+        border-radius: 15px;
+        backdrop-filter: blur(10px);
+        max-width: 500px;
+    }
+</style>
+</head>
+
+<body>
+
+<h1>Ruleta</h1>
+
+<div id="container">
+    <div id="pointer"></div>
+    <canvas id="wheel" width="400" height="400"></canvas>
+</div>
+
+<button onclick="spin()">Girar</button>
+
+<!-- Overlay -->
+<div id="overlay">
+    <div id="box">
+        <h2 id="title"></h2>
+        <p id="scenario"></p>
+        <button onclick="closeOverlay()">Cerrar</button>
+    </div>
+</div>
+
+<script>
+const canvas = document.getElementById("wheel");
+const ctx = canvas.getContext("2d");
+
+let options = 
+[
+    { name: "Separación de basura en la escuela", scenario: "Estás en la escuela y al terminar de comer te das cuenta de que tu lunch venía " +
+        "en una bolsa de plástico de un solo uso, un envase de unicel y una botella de PET. No sabes dónde tirar cada cosa porque todos los " +
+        "botes de basura son iguales. \n ¿Qué harías? \n Separar los residuos en casa la próxima vez y llevar contenedores reutilizables " +
+        "\n Tirar todo junto porque 'total, no hay separación en la escuela' \n Buscar un punto limpio cercano para tirar cada material " +
+        "donde se debe", color: "#6dc9e3" },
+
+    { name: "Fiesta de tu vecino", scenario: "Tu vecino organizó una fiesta y al día siguiente la calle está llena de vasos desechables, " +
+    "servilletas y restos de comida tirados en la banqueta. El viento está arrastrando los residuos hacia la coladera. " +
+    "\n ¿Qué harías? \n Ignorarlo porque no es tu responsabilidad \n Organizar un grupo de limpieza con otros vecinos y reportar la coladera tapada " +
+    "\n Publicarlo en redes sociales y no hacer nada más", color: "#deaf40" },
+
+    { name: "La fábrica de la colonia", scenario: "Te das cuenta que una empresa en tu colonia tira agua con residuos de color oscuro directamente " +
+    "al drenaje en las noches. Los vecinos dicen que el río cerca de la colonia ya huele mal y varios peces han aparecido muertos. " +
+    "\n ¿Qué harías? \n Callarte para no tener problemas con la empresa \n Documentar con evidencia y denunciar ante PROFEPA o el municipio. " +
+    "\n Comentarlo solo con amigos sin tomar acción", color: "#9c54e3" },
+
+    { name: "Exceso de plástico en el supermercado", scenario: "Vas al super y te das cuenta de que cada fruta y verdura está envuelta " +
+    "individualmente en plástico, incluyendo productos que tienen su propia cáscara natural como plátanos o naranjas. " +
+    "El empaque termina en la basura inmediatamente cuando llegas a la casa. \n ¿Qué harías?" +
+    "\n Comprar igual porque es lo que hay y no tienes opción \n Llevar tus propias bolsas de tela y hablar con el gerente para solicitar opciones sin plástico" +
+    "\n Dejar de comprar en ese supermercado sin decirle nada a nadie", color: "#92e354" },
+
+    { name: "El taller mecánico", scenario: "En el taller mecánico de tu tío, el aceite usado de los autos se tira directamente al suelo "+
+    "o al drenaje porque en ese lugar siempre se ha hecho así. Sabes que un litro de aceite puede contaminar hasta un millón de litros de agua." +
+    "\n ¿Qué harías? \n Seguir la costumbre porque cambiarla sería muy costoso \n Investigar los centros de reciclaje de aceite usado en tu ciudad y " +
+    "proponer al taller usar esta práctica \n Evitar el tema para no generar conflictos familiares", color: "#e36dc6" }
+];
+
+let angle = 0;
+let spinning = false;
+
+function wrapText(ctx, text, x, y, maxWidth, lineHeight)
+{
+    let words = text.split(" ");
+    let line = "";
+    let lines = [];
+
+    for (let i = 0; i < words.length; i++)
+    {
+        let testLine = line + words[i] + " ";
+        let testWidth = ctx.measureText(testLine).width;
+
+        if (testWidth > maxWidth && i > 0)
+        {
+            lines.push(line);
+            line = words[i] + " ";
+        }
+        else
+        {
+            line = testLine;
+        }
+    }
+
+    lines.push(line);
+
+    for (let i = 0; i < lines.length; i++)
+    {
+        let lineWidth = ctx.measureText(lines[i]).width;
+
+        ctx.fillText(
+            lines[i],
+            x - lineWidth / 2,
+            y + (i * lineHeight)
+        );
+    }
+}
+
+function drawWheel() 
+{
+    const arc = 2 * Math.PI / options.length;
+
+    for (let i = 0; i < options.length; i++) 
+    {
+        let start = angle + i * arc;
+
+        ctx.fillStyle = options[i].color;
+
+        ctx.beginPath();
+        ctx.moveTo(200, 200);
+        ctx.arc(200, 200, 200, start, start + arc);
+        ctx.fill();
+
+        ctx.save();
+
+        ctx.translate(200, 200);
+        ctx.rotate(start + arc / 2);
+
+        ctx.fillStyle = "white";
+        ctx.font = "14px Arial";
+
+        wrapText(ctx, options[i].name, 110, 0, 100, 16);
+
+        ctx.restore();
+    }
+}
+
+function spin() 
+{
+    if (spinning) return;
+    spinning = true;
+
+    let spinTime = 3000;
+    let start = null;
+    let initialSpeed = Math.random() * 0.3 + 0.3;
+
+    function animate(timestamp) 
+    {
+        if (!start) start = timestamp;
+        let progress = timestamp - start;
+
+        let decay = Math.exp(-progress / 1500);
+        angle += initialSpeed * decay;
+
+        ctx.clearRect(0, 0, 400, 400);
+        drawWheel();
+
+        if (progress < spinTime) 
+        {
+            requestAnimationFrame(animate);
+        } else 
+        {
+            spinning = false;
+            showResult();
+        }
+    }
+
+    requestAnimationFrame(animate);
+}
+
+function showResult() 
+{
+    const arc = 2 * Math.PI / options.length;
+
+    let normalized = angle % (2 * Math.PI);
+    let index = Math.floor((2 * Math.PI - normalized) / arc) % options.length;
+
+    let result = options[index];
+
+    document.getElementById("title").innerText = result.name;
+    document.getElementById("scenario").innerText = result.scenario;
+    document.getElementById("overlay").style.display = "flex";
+}
+
+function closeOverlay() 
+{
+    document.getElementById("overlay").style.display = "none";
+}
+
+drawWheel();
+</script>
+
+</body>
+</html>
